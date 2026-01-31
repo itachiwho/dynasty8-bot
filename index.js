@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { Client, GatewayIntentBits, EmbedBuilder } = require('discord.js');
+const { Client, GatewayIntentBits } = require('discord.js');
 const express = require('express');
 const cors = require('cors');
 
@@ -62,30 +62,34 @@ app.post('/api/remind', async (req, res) => {
 
         console.log(`📢 Sending reminder for ${houseName} to ${tenantName || tenantDiscordId}`);
 
-        // Create the reminder embed
-        const embed = new EmbedBuilder()
-            .setColor('#FF0000')
-            .setTitle('🏠 RENT REMINDER')
-            .setDescription(`Your rent payment is now due!`)
-            .addFields(
-                { name: '🏘️ Property', value: houseName, inline: true },
-                { name: '💰 Amount', value: `$${price.toLocaleString()}`, inline: true },
-                { name: '⏰ Due', value: 'Within 3 days', inline: true }
-            )
-            .setFooter({ text: 'Dynasty 8 Real Estate' })
-            .setTimestamp();
+        const reminderMessage = `# :incoming_envelope:  Dynasty 8 — Rent Reminder
+Dear <@${tenantDiscordId}>,
+
+This is a gentle reminder that your rent payment is currently overdue. We kindly request you to clear the outstanding amount at your earliest convenience to avoid any inconvenience. If you have already made the payment, please ignore this message. For any questions or assistance, feel free to contact us.
+
+## Property Address: **${houseName}**
+
+Thank you for your cooperation.
+- **Dynasty 8 Real Estate Reminder Team**`;
+
+        let dmFailed = false;
+        let dmError = '';
 
         // Send DM to tenant
         try {
             const user = await client.users.fetch(tenantDiscordId);
-            await user.send({ embeds: [embed] });
+            await user.send(reminderMessage);
             console.log(`✅ DM sent to ${user.tag}`);
-        } catch (dmError) {
-            console.log(`⚠️ Could not send DM to user ${tenantDiscordId}:`, dmError.message);
+        } catch (dmErr) {
+            dmFailed = true;
+            console.log(`⚠️ Could not send DM to user ${tenantDiscordId}:`, dmErr.message);
 
-            // If DM fails, still try to send channel message
-            if (dmError.code === 50007) {
-                console.log('User has DMs disabled or bot is not in mutual server');
+            if (dmErr.code === 50007) {
+                dmError = 'User has DMs disabled or blocked the bot';
+                console.log('❌ DM FAILURE LOG: User has DMs disabled or not in mutual server');
+            } else {
+                dmError = dmErr.message;
+                console.log('❌ DM FAILURE LOG:', dmErr.message);
             }
         }
 
@@ -93,12 +97,15 @@ app.post('/api/remind', async (req, res) => {
         try {
             const channel = await client.channels.fetch(CHANNEL_ID);
 
-            await channel.send({
-                content: `📢 Attention <@${tenantDiscordId}>, your rent for **${houseName}** is due!`,
-                embeds: [embed],
-            });
+            await channel.send(reminderMessage);
 
             console.log('✅ Channel message sent');
+
+            // Log if DM failed
+            if (dmFailed) {
+                await channel.send(`⚠️ **ADMIN ALERT**: Failed to send DM to <@${tenantDiscordId}> for ${houseName}. Reason: ${dmError}`);
+                console.log(`⚠️ Admin alert sent about DM failure`);
+            }
         } catch (channelError) {
             console.error('❌ Failed to send channel message:', channelError.message);
             return res.status(500).json({ error: 'Failed to send channel message' });
@@ -106,12 +113,100 @@ app.post('/api/remind', async (req, res) => {
 
         return res.status(200).json({
             message: 'Reminder sent successfully',
-            sentDM: true,
-            sentChannel: true,
+            dmFailed,
+            dmError: dmFailed ? dmError : null,
         });
 
     } catch (error) {
         console.error('❌ Reminder error:', error);
+        return res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Webhook Endpoint for Eviction Notices
+app.post('/api/evict', async (req, res) => {
+    try {
+        // Verify webhook secret
+        const requestSecret = req.headers['x-webhook-secret'];
+        if (requestSecret !== WEBHOOK_SECRET) {
+            console.log('❌ Unauthorized webhook attempt');
+            return res.status(401).json({ error: 'Unauthorized' });
+        }
+
+        const { houseName, tenantDiscordId, tenantName } = req.body;
+
+        // Validate required fields
+        if (!houseName || !tenantDiscordId) {
+            return res.status(400).json({ error: 'Missing required fields' });
+        }
+
+        console.log(`🚨 Sending eviction notice for ${houseName} to ${tenantName || tenantDiscordId}`);
+
+        const evictionMessage = `## :envelope_with_arrow: Dynasty 8 — Evictable Property Notice
+Dear Customer, <@${tenantDiscordId}>
+
+Your property at: ${houseName}
+has been marked as Evictable.
+
+**You have 24 hours to clear the payment.**
+If payment is not made within this time, the house will be removed.
+
+:warning: Once removed,
+Dynasty 8 will not be responsible for the property or any belongings.
+
+If you are facing any issue or need time,
+please open a [**Ticket Dynasty 8**](https://discord.com/channels/790476881988288512/1288495602954534922) immediately and inform us.
+(Waiting until after removal will not be accepted.)
+Thank you for your cooperation.
+- **Dynasty 8 Real Estate Reminder Team**`;
+
+        let dmFailed = false;
+        let dmError = '';
+
+        // Send DM to tenant
+        try {
+            const user = await client.users.fetch(tenantDiscordId);
+            await user.send(evictionMessage);
+            console.log(`✅ Eviction DM sent to ${user.tag}`);
+        } catch (dmErr) {
+            dmFailed = true;
+            console.log(`⚠️ Could not send eviction DM to user ${tenantDiscordId}:`, dmErr.message);
+
+            if (dmErr.code === 50007) {
+                dmError = 'User has DMs disabled or blocked the bot';
+                console.log('❌ EVICTION DM FAILURE LOG: User has DMs disabled');
+            } else {
+                dmError = dmErr.message;
+                console.log('❌ EVICTION DM FAILURE LOG:', dmErr.message);
+            }
+        }
+
+        // Send message in designated channel
+        try {
+            const channel = await client.channels.fetch(CHANNEL_ID);
+
+            await channel.send(`<@${tenantDiscordId}>\n${evictionMessage}`);
+
+            console.log('✅ Eviction channel message sent');
+
+            // Log if DM failed
+            if (dmFailed) {
+                await channel.send(`⚠️ **ADMIN ALERT**: Failed to send eviction DM to <@${tenantDiscordId}> for ${houseName}. Reason: ${dmError}`);
+                console.log(`⚠️ Admin alert sent about eviction DM failure`);
+            }
+        } catch (channelError) {
+            console.error('❌ Failed to send eviction channel message:', channelError.message);
+            return res.status(500).json({ error: 'Failed to send channel message' });
+        }
+
+        return res.status(200).json({
+            message: 'Eviction notice sent successfully',
+            dmFailed,
+            dmError: dmFailed ? dmError : null,
+        });
+
+    } catch (error) {
+        console.error('❌ Eviction error:', error);
         return res.status(500).json({ error: 'Internal server error' });
     }
 });
