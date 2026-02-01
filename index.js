@@ -185,7 +185,7 @@ Thank you for your cooperation.
         try {
             const channel = await client.channels.fetch(CHANNEL_ID);
 
-            await channel.send(`<@${tenantDiscordId}>\n${evictionMessage}`);
+            await channel.send(evictionMessage);
 
             console.log('✅ Eviction channel message sent');
 
