@@ -143,7 +143,7 @@ app.post('/api/evict', async (req, res) => {
         console.log(`🚨 Sending eviction notice for ${houseName} to ${tenantName || tenantDiscordId}`);
 
         const evictionMessage = `## :envelope_with_arrow: Dynasty 8 — Evictable Property Notice
-Dear Customer, <@${tenantDiscordId}>
+Dear Customer,
 
 Your property at: ${houseName}
 has been marked as Evictable.
@@ -155,7 +155,7 @@ If payment is not made within this time, the house will be removed.
 Dynasty 8 will not be responsible for the property or any belongings.
 
 If you are facing any issue or need time,
-please open a [**Ticket Dynasty 8**](https://discord.com/channels/790476881988288512/1288495602954534922) immediately and inform us.
+please open a [**Ticket Dynasty 8**](https://discord.gg/2ZQUpnJVh7) immediately and inform us.
 (Waiting until after removal will not be accepted.)
 Thank you for your cooperation.
 - **Dynasty 8 Real Estate Reminder Team**`;
@@ -218,10 +218,20 @@ app.listen(PORT, () => {
 });
 
 // Login to Discord
-client.login(process.env.DISCORD_BOT_TOKEN).catch((error) => {
-    console.error('❌ Failed to login to Discord:', error);
-    process.exit(1);
-});
+console.log('🔄 Attempting to login to Discord...');
+console.log(`🔑 Token exists: ${!!process.env.DISCORD_BOT_TOKEN}`);
+console.log(`🔑 Token length: ${process.env.DISCORD_BOT_TOKEN ? process.env.DISCORD_BOT_TOKEN.length : 0}`);
+
+client.login(process.env.DISCORD_BOT_TOKEN)
+    .then(() => {
+        console.log('✅ Discord login successful!');
+    })
+    .catch((error) => {
+        console.error('❌ Failed to login to Discord:');
+        console.error('Error message:', error.message);
+        console.error('Error code:', error.code);
+        console.error('Full error:', JSON.stringify(error));
+    });
 
 // Graceful Shutdown
 process.on('SIGINT', () => {
