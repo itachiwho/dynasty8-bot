@@ -143,7 +143,7 @@ app.post('/api/evict', async (req, res) => {
         console.log(`🚨 Sending eviction notice for ${houseName} to ${tenantName || tenantDiscordId}`);
 
         const evictionMessage = `## :envelope_with_arrow: Dynasty 8 — Evictable Property Notice
-Dear Customer,
+Dear Customer, <@${tenantDiscordId}>
 
 Your property at: ${houseName}
 has been marked as Evictable.
@@ -155,7 +155,7 @@ If payment is not made within this time, the house will be removed.
 Dynasty 8 will not be responsible for the property or any belongings.
 
 If you are facing any issue or need time,
-please open a [**Ticket Dynasty 8**](https://discord.gg/2ZQUpnJVh7) immediately and inform us.
+please open a [**Ticket Dynasty 8**](https://discord.com/channels/790476881988288512/1288495602954534922) immediately and inform us.
 (Waiting until after removal will not be accepted.)
 Thank you for your cooperation.
 - **Dynasty 8 Real Estate Reminder Team**`;
