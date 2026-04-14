@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { Client, GatewayIntentBits } = require('discord.js');
+const { Client, GatewayIntentBits, SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
 const express = require('express');
 const cors = require('cors');
 
@@ -27,6 +27,28 @@ client.once('ready', () => {
     console.log(`📝 Logged in as: ${client.user.tag}`);
     console.log(`🆔 Bot ID: ${client.user.id}`);
     console.log(`🚀 Serving ${client.guilds.cache.size} server(s)`);
+
+    // Register /sendtext command for your specific server (fast update)
+    const guild = client.guilds.cache.get('790476881988288512'); // ←←← CHANGE THIS TO YOUR ACTUAL SERVER ID
+    if (guild) {
+        guild.commands.create(
+            new SlashCommandBuilder()
+                .setName('sendtext')
+                .setDescription('Send any custom styled message (markdown supported) to the channel')
+                .addStringOption(option =>
+                    option.setName('message')
+                        .setDescription('Paste your full message with #, ##, **bold**, *italic*, line breaks, etc.')
+                        .setRequired(true)
+                )
+                .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+        ).then(() => {
+            console.log('✅ /sendtext slash command registered successfully!');
+        }).catch(err => {
+            console.error('❌ Failed to register /sendtext command:', err.message);
+        });
+    } else {
+        console.warn('⚠️ Could not find guild with the provided SERVER_ID. Command not registered.');
+    }
 });
 
 // Error Handling
@@ -34,7 +56,43 @@ client.on('error', (error) => {
     console.error('❌ Discord Client Error:', error);
 });
 
-// Health Check Endpoint
+// Handle Slash Commands
+client.on('interactionCreate', async interaction => {
+    if (!interaction.isChatInputCommand()) return;
+
+    if (interaction.commandName === 'sendtext') {
+        // Only admins can use it
+        if (!interaction.memberPermissions.has(PermissionFlagsBits.Administrator)) {
+            return interaction.reply({ 
+                content: '❌ Only administrators can use this command.', 
+                ephemeral: true 
+            });
+        }
+
+        const customMessage = interaction.options.getString('message');
+
+        try {
+            const channel = await client.channels.fetch(CHANNEL_ID);
+            await channel.send(customMessage);
+
+            console.log(`📨 Custom styled message sent by ${interaction.user.tag}`);
+
+            await interaction.reply({
+                content: '✅ Custom message sent successfully to the channel!',
+                ephemeral: true
+            });
+
+        } catch (error) {
+            console.error('❌ Failed to send custom message:', error.message);
+            await interaction.reply({
+                content: '❌ Failed to send the message. Check if bot has Send Messages permission in the channel.',
+                ephemeral: true
+            });
+        }
+    }
+});
+
+// Health Check Endpoint (unchanged)
 app.get('/health', (req, res) => {
     res.json({
         status: 'online',
@@ -43,10 +101,9 @@ app.get('/health', (req, res) => {
     });
 });
 
-// Webhook Endpoint for Rent Reminders
+// Webhook Endpoint for Rent Reminders (completely unchanged)
 app.post('/api/remind', async (req, res) => {
     try {
-        // Verify webhook secret
         const requestSecret = req.headers['x-webhook-secret'];
         if (requestSecret !== WEBHOOK_SECRET) {
             console.log('❌ Unauthorized webhook attempt');
@@ -55,7 +112,6 @@ app.post('/api/remind', async (req, res) => {
 
         const { houseName, price, tenantDiscordId, tenantName } = req.body;
 
-        // Validate required fields
         if (!houseName || !price || !tenantDiscordId) {
             return res.status(400).json({ error: 'Missing required fields' });
         }
@@ -75,7 +131,6 @@ Thank you for your cooperation.
         let dmFailed = false;
         let dmError = '';
 
-        // Send DM to tenant
         try {
             const user = await client.users.fetch(tenantDiscordId);
             await user.send(reminderMessage);
@@ -93,15 +148,11 @@ Thank you for your cooperation.
             }
         }
 
-        // Send message in designated channel
         try {
             const channel = await client.channels.fetch(CHANNEL_ID);
-
             await channel.send(reminderMessage);
-
             console.log('✅ Channel message sent');
 
-            // Log if DM failed
             if (dmFailed) {
                 await channel.send(`⚠️ **ADMIN ALERT**: Failed to send DM to <@${tenantDiscordId}> for ${houseName}. Reason: ${dmError}`);
                 console.log(`⚠️ Admin alert sent about DM failure`);
@@ -123,10 +174,9 @@ Thank you for your cooperation.
     }
 });
 
-// Webhook Endpoint for Eviction Notices
+// Webhook Endpoint for Eviction Notices (completely unchanged)
 app.post('/api/evict', async (req, res) => {
     try {
-        // Verify webhook secret
         const requestSecret = req.headers['x-webhook-secret'];
         if (requestSecret !== WEBHOOK_SECRET) {
             console.log('❌ Unauthorized webhook attempt');
@@ -135,7 +185,6 @@ app.post('/api/evict', async (req, res) => {
 
         const { houseName, tenantDiscordId, tenantName } = req.body;
 
-        // Validate required fields
         if (!houseName || !tenantDiscordId) {
             return res.status(400).json({ error: 'Missing required fields' });
         }
@@ -163,7 +212,6 @@ Thank you for your cooperation.
         let dmFailed = false;
         let dmError = '';
 
-        // Send DM to tenant
         try {
             const user = await client.users.fetch(tenantDiscordId);
             await user.send(evictionMessage);
@@ -181,15 +229,11 @@ Thank you for your cooperation.
             }
         }
 
-        // Send message in designated channel
         try {
             const channel = await client.channels.fetch(CHANNEL_ID);
-
             await channel.send(evictionMessage);
-
             console.log('✅ Eviction channel message sent');
 
-            // Log if DM failed
             if (dmFailed) {
                 await channel.send(`⚠️ **ADMIN ALERT**: Failed to send eviction DM to <@${tenantDiscordId}> for ${houseName}. Reason: ${dmError}`);
                 console.log(`⚠️ Admin alert sent about eviction DM failure`);
