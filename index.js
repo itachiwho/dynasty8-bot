@@ -28,16 +28,16 @@ client.once('ready', () => {
     console.log(`🆔 Bot ID: ${client.user.id}`);
     console.log(`🚀 Serving ${client.guilds.cache.size} server(s)`);
 
-    // Register /sendtext command for your specific server (fast update)
-    const guild = client.guilds.cache.get('790476881988288512'); // ←←← CHANGE THIS TO YOUR ACTUAL SERVER ID
+    // Register /sendtext command
+    const guild = client.guilds.cache.get('790476881988288512');
     if (guild) {
         guild.commands.create(
             new SlashCommandBuilder()
                 .setName('sendtext')
-                .setDescription('Send any custom styled message (markdown supported) to the channel')
+                .setDescription('Send any custom styled message (markdown supported)')
                 .addStringOption(option =>
                     option.setName('message')
-                        .setDescription('Paste your full message with #, ##, **bold**, *italic*, line breaks, etc.')
+                        .setDescription('Paste your message. Use \\n for line breaks')
                         .setRequired(true)
                 )
                 .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
@@ -47,7 +47,7 @@ client.once('ready', () => {
             console.error('❌ Failed to register /sendtext command:', err.message);
         });
     } else {
-        console.warn('⚠️ Could not find guild with the provided SERVER_ID. Command not registered.');
+        console.warn('⚠️ Could not find guild. Command not registered.');
     }
 });
 
@@ -56,12 +56,11 @@ client.on('error', (error) => {
     console.error('❌ Discord Client Error:', error);
 });
 
-// Handle Slash Commands
+// Handle Slash Commands - Fixed version
 client.on('interactionCreate', async interaction => {
     if (!interaction.isChatInputCommand()) return;
 
     if (interaction.commandName === 'sendtext') {
-        // Only admins can use it
         if (!interaction.memberPermissions.has(PermissionFlagsBits.Administrator)) {
             return interaction.reply({ 
                 content: '❌ Only administrators can use this command.', 
@@ -69,7 +68,15 @@ client.on('interactionCreate', async interaction => {
             });
         }
 
-        const customMessage = interaction.options.getString('message');
+        let customMessage = interaction.options.getString('message');
+
+        // Convert \n into real line breaks
+        customMessage = customMessage.replace(/\\n/g, '\n');
+
+        // Fix: Prevent whole message becoming huge header when starting with #
+        if (customMessage.trim().startsWith('#')) {
+            customMessage = '​' + customMessage;   // Zero-width space
+        }
 
         try {
             const channel = await client.channels.fetch(CHANNEL_ID);
@@ -85,14 +92,14 @@ client.on('interactionCreate', async interaction => {
         } catch (error) {
             console.error('❌ Failed to send custom message:', error.message);
             await interaction.reply({
-                content: '❌ Failed to send the message. Check if bot has Send Messages permission in the channel.',
+                content: '❌ Failed to send the message. Check if bot has Send Messages permission.',
                 ephemeral: true
             });
         }
     }
 });
 
-// Health Check Endpoint (unchanged)
+// Health Check Endpoint
 app.get('/health', (req, res) => {
     res.json({
         status: 'online',
@@ -101,7 +108,7 @@ app.get('/health', (req, res) => {
     });
 });
 
-// Webhook Endpoint for Rent Reminders (completely unchanged)
+// ==================== YOUR ORIGINAL REMIND ENDPOINT (FULLY RESTORED) ====================
 app.post('/api/remind', async (req, res) => {
     try {
         const requestSecret = req.headers['x-webhook-secret'];
@@ -150,7 +157,9 @@ Thank you for your cooperation.
 
         try {
             const channel = await client.channels.fetch(CHANNEL_ID);
+
             await channel.send(reminderMessage);
+
             console.log('✅ Channel message sent');
 
             if (dmFailed) {
@@ -174,7 +183,7 @@ Thank you for your cooperation.
     }
 });
 
-// Webhook Endpoint for Eviction Notices (completely unchanged)
+// ==================== YOUR ORIGINAL EVICT ENDPOINT (FULLY RESTORED) ====================
 app.post('/api/evict', async (req, res) => {
     try {
         const requestSecret = req.headers['x-webhook-secret'];
@@ -231,7 +240,9 @@ Thank you for your cooperation.
 
         try {
             const channel = await client.channels.fetch(CHANNEL_ID);
+
             await channel.send(evictionMessage);
+
             console.log('✅ Eviction channel message sent');
 
             if (dmFailed) {
