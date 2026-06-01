@@ -62,9 +62,9 @@ client.on('interactionCreate', async interaction => {
 
     if (interaction.commandName === 'sendtext') {
         if (!interaction.memberPermissions.has(PermissionFlagsBits.Administrator)) {
-            return interaction.reply({ 
-                content: '❌ Only administrators can use this command.', 
-                ephemeral: true 
+            return interaction.reply({
+                content: '❌ Only administrators can use this command.',
+                ephemeral: true
             });
         }
 
@@ -203,8 +203,7 @@ app.post('/api/evict', async (req, res) => {
         const evictionMessage = `## :envelope_with_arrow: Dynasty 8 — Evictable Property Notice
 Dear Customer, <@${tenantDiscordId}>
 
-Your property at: ${houseName}
-has been marked as Evictable.
+Your property at: **${houseName}** has been marked as Evictable.
 
 **You have 24 hours to clear the payment.**
 If payment is not made within this time, the house will be removed.
@@ -262,6 +261,93 @@ Thank you for your cooperation.
 
     } catch (error) {
         console.error('❌ Eviction error:', error);
+        return res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// ==================== DISMISS ENDPOINT ====================
+app.post('/api/dismiss', async (req, res) => {
+    try {
+        const requestSecret = req.headers['x-webhook-secret'];
+        if (requestSecret !== WEBHOOK_SECRET) {
+            console.log('❌ Unauthorized webhook attempt');
+            return res.status(401).json({ error: 'Unauthorized' });
+        }
+
+        const { houseName, tenantDiscordId, tenantName } = req.body;
+
+        if (!houseName || !tenantDiscordId) {
+            return res.status(400).json({ error: 'Missing required fields' });
+        }
+
+        console.log(`🚫 Sending dismissal notice for ${houseName} to ${tenantName || tenantDiscordId}`);
+
+        const dismissalMessage = `## :no_entry: Dynasty 8 — Property Removed
+Dear Customer, <@${tenantDiscordId}>
+
+Your access to the property located at **${houseName}** has been officially **Removed** from Dynasty 8 Real Estate.
+
+:placard: **Important Notice**
+
+Due to unpaid rent, your tenancy has been terminated and your access to this property has been revoked.
+
+If you wish to regain access to your property and recover any belongings associated with it, you must:
+
+- Contact the Dynasty 8 Team within **24 hours**
+- Clear any outstanding evictable dues or unpaid rent
+- Follow any instructions provided by Dynasty 8 staff
+
+Failure to contact Dynasty 8 within the specified time period may result in permanent loss of access and forfeiture of any remaining property rights associated with this residence.
+
+If you believe this action was taken in error or would like to resolve the matter, please open a [**Ticket in Dynasty 8**](https://discord.com/channels/790476881988288512/1288495602954534922) within 24 hours.
+
+Thank you.
+- **Dynasty 8 Real Estate Management Team**`;
+
+        let dmFailed = false;
+        let dmError = '';
+
+        try {
+            const user = await client.users.fetch(tenantDiscordId);
+            await user.send(dismissalMessage);
+            console.log(`✅ Dismissal DM sent to ${user.tag}`);
+        } catch (dmErr) {
+            dmFailed = true;
+            console.log(`⚠️ Could not send dismissal DM to user ${tenantDiscordId}:`, dmErr.message);
+
+            if (dmErr.code === 50007) {
+                dmError = 'User has DMs disabled or blocked the bot';
+                console.log('❌ DISMISSAL DM FAILURE LOG: User has DMs disabled');
+            } else {
+                dmError = dmErr.message;
+                console.log('❌ DISMISSAL DM FAILURE LOG:', dmErr.message);
+            }
+        }
+
+        try {
+            const channel = await client.channels.fetch(CHANNEL_ID);
+
+            await channel.send(dismissalMessage);
+
+            console.log('✅ Dismissal channel message sent');
+
+            if (dmFailed) {
+                await channel.send(`⚠️ **ADMIN ALERT**: Failed to send dismissal DM to <@${tenantDiscordId}> for ${houseName}. Reason: ${dmError}`);
+                console.log(`⚠️ Admin alert sent about dismissal DM failure`);
+            }
+        } catch (channelError) {
+            console.error('❌ Failed to send dismissal channel message:', channelError.message);
+            return res.status(500).json({ error: 'Failed to send channel message' });
+        }
+
+        return res.status(200).json({
+            message: 'Dismissal notice sent successfully',
+            dmFailed,
+            dmError: dmFailed ? dmError : null,
+        });
+
+    } catch (error) {
+        console.error('❌ Dismissal error:', error);
         return res.status(500).json({ error: 'Internal server error' });
     }
 });
